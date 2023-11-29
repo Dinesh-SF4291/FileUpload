@@ -1,0 +1,146 @@
+﻿@page "/file"
+@inject ILogger<Upload> Logger
+@inject IHostEnvironment Environment
+@using System
+@using Microsoft.AspNetCore.Http
+@using Microsoft.Data.SqlClient
+
+
+
+<h3>Click Upload button to Upload the File</h3>
+
+<p>
+    <label>
+        Max File Size:
+        <input type="number" @bind="maxFileSize"/>
+    </label>
+</p>
+
+<p>
+    <label>
+        
+        <InputFile OnChange="@LoadFile"/>  
+    </label>
+</p>
+@if(isLoading)
+{
+    <p>Uploading...</p>
+}
+else
+{
+    
+    <ul>
+        <li>
+            @foreach(var file in loadedFiles)
+            {
+                <ul>
+                    <li>File Name: @file.Name</li>
+                    <li>Size in Bytes:@file.Size</li>
+                    <li>Content Type: @file.ContentType</li>
+
+                </ul>
+            }
+        </li>
+    </ul>
+    
+}
+<button class="btn btn-primary" onclick="@AddData">Submit</button>
+
+@code {
+    private List<IBrowserFile> loadedFiles = new();
+    private long maxFileSize = 1024 * 15;
+    private bool isLoading;
+    private string? message;
+    private int maxAllowedFiles = 1;
+    private static bool flag=false;
+    private static string fileName;
+
+
+    private async Task LoadFile(InputFileChangeEventArgs e)
+    {
+        isLoading = true;
+        loadedFiles.Clear();
+        message = string.Empty;
+        if (e.FileCount > maxAllowedFiles)
+        {
+            message = $"Only {maxAllowedFiles} can be uploaded";
+        }
+        else
+        {
+            foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+            {
+                var randomName = file.Name;
+                var path = Path.Combine(Environment.ContentRootPath, Environment.EnvironmentName, "unsafe_uploads", randomName);
+                await using FileStream fileStream = new(path, FileMode.Create);
+                try
+                {
+                    await file.OpenReadStream(maxFileSize).CopyToAsync(fileStream);
+                    loadedFiles.Add(file);
+                    flag = true;
+                    fileName = file.Name;
+                }
+                catch (Exception ex)
+                {
+                    fileStream.Close();
+                    File.Delete(path);
+                    Logger.LogError("File:{FileName} Error:{Error}", file.Name, ex.Message);
+                    message = "Upload error(s). See log for details.";
+                    flag = false;
+                }
+            }  
+        }
+        isLoading = false;
+    }
+    private static void AddData()
+    {
+        /*SqlConnection conn = new SqlConnection(@"Data Source=SYNCLAPN-38095;Initial Catalog=master;TrustServerCertificate=True;Integrated Security=True;User Id=SA;Password=Dinesh@180801");
+        string query = "Create database Details";
+        SqlCommand command = new SqlCommand(query, conn);
+        conn.Open();
+        command.ExecuteNonQuery();
+        conn.Close();*/
+        TableCreation();
+    }
+    private static void TableCreation()
+    {
+        /*SqlConnection connection = new SqlConnection(@"Data Source=SYNCLAPN-38095;Initial Catalog=Details;TrustServerCertificate=True;Integrated Security=True;User Id=SA;Password=Dinesh@180801");
+        string tableQuery = @"Create table UserDetails(
+        Id int not null primary key identity(1,1),
+        ServerName varChar(30),
+        PortNumber varChar(30),
+        UserID varChar(30) ,
+        Password varChar(30)  
+        )";
+        SqlCommand command1 = new SqlCommand(tableQuery, connection);
+        connection.Open();
+        command1.ExecuteNonQuery();
+        connection.Close();*/
+        ValueToDataBase();
+    }
+    private static void ValueToDataBase()
+    {
+
+        string[] ogArray = File.ReadAllLines($"Development/unsafe_uploads/{fileName}");
+        string[] userArray = ogArray[0].Split(",");
+        SqlConnection connection = new SqlConnection(@"Data Source=SYNCLAPN-38095;Initial Catalog=Details;TrustServerCertificate=True;Integrated Security=True;User Id=SA;Password=Dinesh@180801");
+        string addQuery = @"insert into UserDetails values(@serverName,@portNumber,@userID,@password)";
+        using(SqlCommand cmd = new SqlCommand(@"Data Source=SYNCLAPN-38095;Initial Catalog=Details;TrustServerCertificate=True;Integrated Security=True;User Id=SA;Password=Dinesh@180801"))
+    {
+            SqlCommand command =new SqlCommand(addQuery,connection);
+            SqlParameter param = new SqlParameter("@serverName",userArray[0]);
+            command.Parameters.Add(param);
+            SqlParameter param1 = new SqlParameter("@portNumber", userArray[1]);
+            command.Parameters.Add(param1);
+            SqlParameter param2 = new SqlParameter("@userID",userArray[2]);
+            command.Parameters.Add(param2);
+            SqlParameter param3 = new SqlParameter("@password", userArray[3]);
+            command.Parameters.Add(param3);
+            connection.Open();
+            command.ExecuteNonQuery();
+            connection.Close();
+        }
+
+
+    }
+
+}
